@@ -294,11 +294,14 @@ int main(void)
 
 	//test variable for sdram
 	uint32_t offset = 0;
+	uint32_t *sdram_mem = (uint32_t*)(pvt->bar[2]+offset);
 
 	pvt->variable_manager[0].info.id = 0;	
 	pvt->variable_manager[0].info.writable = true;
 	pvt->variable_manager[0].info.size = sizeof(uint32_t);//4 bytes...I know
-	pvt->variable_manager[0].data = (uint8_t*)(pvt->bar[2]+offset);
+	pvt->variable_manager[0].data = (uint8_t*)(sdram_mem);
+	sdram_mem[0]  = (uint32_t) 10;
+	printf("teste: %u\n", sdram_mem[0]);
 
 	err = sllp_register_variable(pvt->sllp,&pvt->variable_manager[0]);
 
