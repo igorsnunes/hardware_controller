@@ -10,6 +10,7 @@
 #include "/usr/include/pciDriver/driver/pciDriver.h"
 #include "/usr/include/pciDriver/lib/pciDriver.h"
 #include <netinet/tcp.h>
+#include "readwriteDMA.h"
 
 #define   MAX_DEVICES  5
 #define   VAR_NUM 1
@@ -17,8 +18,8 @@
 #define   PORT 7000
 
 #define BRAM_SIZE  0x4000
-#define MAXBUFRECV 256
-#define SLLP_CURVE_TEST 2
+#define MAXBUFRECV SLLP_CURVE_BLOCK_SIZE+10
+#define SLLP_CURVE_TEST SLLP_CURVE_BLOCK_SIZE
 
 typedef enum {
 	TYPE_CHILD_PROCESS,
@@ -44,7 +45,7 @@ typedef struct {
 	GList *high;
 	GList *low;
 } command_list;
-	
+
 typedef struct {
 	command_list *cmds;
 	pcie_dma_pvt *ppvt;
@@ -56,7 +57,7 @@ typedef struct {
 } command;
 
 
-	
+
 typedef enum {
 	CONN_LOW,
 	CONN_HIGH,
@@ -90,7 +91,7 @@ void connection_low(void *conn_fd){
 	int n;
 	int i;
 	pcie_dma_pvt *pvt = fd_pvt->ppvt;
-	uint8_t *buf;	
+	uint8_t *buf;
 	uint8_t *auxbuf;
 	uint8_t *bufresponse;
 	g_free(fd_pvt);
@@ -98,7 +99,7 @@ void connection_low(void *conn_fd){
 	struct sllp_raw_packet response;
 	printf("connection low socket: %u", childfd);
 	while (1){
-		
+
 		buf = (uint8_t*)g_try_malloc(sizeof(uint8_t)*MAXBUFRECV);
 		printf("waiting message from client\n");
 		n = read(childfd, (char*)buf, MAXBUFRECV);
@@ -107,11 +108,11 @@ void connection_low(void *conn_fd){
 			printf("%d ",buf[i+2]);
 		printf("\n");
 		auxbuf = g_try_malloc(n*sizeof(char));
-		if (n < 0) 
+		if (n < 0)
 			error("ERROR reading from socket");
-	
+
 		memcpy(auxbuf,buf,n);
-	
+
 		g_free(buf);
 
 		request.data = auxbuf;
@@ -119,19 +120,19 @@ void connection_low(void *conn_fd){
 
 		bufresponse = (char*)g_try_malloc(sizeof(char)*MAXBUFRECV);
 		response.data = bufresponse;
-		
+
 		sllp_process_packet (pvt->sllp,&request,&response);
 
 		printf("data to be sent: %d %d \n",response.data[0],response.data[1]);
 		for(i = 0;i<response.data[1];i++)
 			printf("%d ",response.data[i+2]);
 		printf("\n");
-		
+
 		printf("pci value: %d\n", *((uint32_t*)(pvt->bar[2]+(uint32_t)0)));
 		n = write(childfd, (char*)response.data, response.len);
-		if (n < 0) 
+		if (n < 0)
 			error("ERROR writing to socket");
-	
+
 		g_free(auxbuf);
 		g_free(bufresponse);
 	}
@@ -148,7 +149,7 @@ static uint8_t* recv_message(int *n,unsigned int childfd, uint8_t *buf){
 		printf("%d ",buf[i+2]);
 	printf("\n");
 	auxbuf = g_try_malloc(*(n)*sizeof(uint8_t));
-	if (n < 0){ 
+	if (n < 0){
 		error("ERROR reading from socket");
 		return NULL;
 	}
@@ -158,13 +159,13 @@ static uint8_t* recv_message(int *n,unsigned int childfd, uint8_t *buf){
 	g_free(buf);
 	return auxbuf;
 }
-static int send_message(int *n, unsigned int childfd, uint8_t *buf, unsigned int len){	
+static int send_message(int *n, unsigned int childfd, uint8_t *buf, unsigned int len){
 	int i;
 	printf("data to be sent: %d %d \n",buf[0],buf[1]);
 	for(i = 0;i<buf[1];i++)
 		printf("%d ",buf[i+2]);
 	printf("\n");
-	
+
 	*n = write(childfd, (char*)buf, len);
 	if (n < 0){
 		error("ERROR writing to socket");
@@ -178,14 +179,14 @@ void connection_dma(void *conn_fd){
 	int n;
 	int i;
 	pcie_dma_pvt *pvt = fd_pvt->ppvt;
-	uint8_t *buf;	
+	uint8_t *buf;
 	uint8_t *auxbuf;
 	uint8_t *bufresponse;
 	g_free(fd_pvt);
 	struct sllp_raw_packet request;
 	struct sllp_raw_packet response;
 	while (1){
-		
+
 		buf = (uint8_t*)g_try_malloc(sizeof(uint8_t)*MAXBUFRECV);
 		buf = recv_message(&n,childfd,buf);
 
@@ -194,10 +195,10 @@ void connection_dma(void *conn_fd){
 
 		bufresponse = (char*)g_try_malloc(sizeof(char)*MAXBUFRECV);
 		response.data = bufresponse;
-		
+
 		sllp_process_packet (pvt->sllp_dma,&request,&response);
-		
-		send_message(&n, childfd, response.data, response.len);	
+
+		send_message(&n, childfd, response.data, response.len);
 		g_free(buf);
 		g_free(bufresponse);
 	}
@@ -229,15 +230,15 @@ static GThread *serve_it(void *thread_parameter, thread_parameter_type type){
 	return new_thread;
 }
 
-void read_dio(struct sllp_curve *curve, uint8_t block, uint8_t *data){
-	printf("READ DMA");
+void read_dio(struct sllp_curve *curve, uint16_t block, uint8_t *data){
+	printf("READ DIO");
 	uint8_t *data_block = (uint8_t*) curve->user + block*SLLP_CURVE_BLOCK_SIZE;
 	memcpy(data, data_block, SLLP_CURVE_BLOCK_SIZE);
 	return;
 }
 
-void write_dio(struct sllp_curve *curve, uint8_t block, uint8_t *data){
-	printf("WRITE DMA");
+void write_dio(struct sllp_curve *curve, uint16_t block, uint8_t *data){
+	printf("WRITE DIO");
 	// Pega informacao sobre qual curva escrever
 	uint8_t *data_block = (uint8_t*) curve->user + block*SLLP_CURVE_BLOCK_SIZE;
 
@@ -245,7 +246,25 @@ void write_dio(struct sllp_curve *curve, uint8_t block, uint8_t *data){
 	memcpy(data_block, data, SLLP_CURVE_BLOCK_SIZE);
 	return;
 }
-			
+
+void read_dma(struct sllp_curve *curve, uint16_t block, uint8_t *data){
+	printf("READ DMA\n");
+	pcie_dma_pvt *pvt = (pcie_dma_pvt*)curve->user;
+	DMAKernelMemoryRead(pvt->bar[0],pvt->bar[2],NULL,pvt->kmem_handle,block*SLLP_CURVE_BLOCK_SIZE,
+			pvt->kernel_memory,1);
+	data = (uint8_t*)pvt->kmem_handle->pa;
+	return;
+}
+
+void write_dma(struct sllp_curve *curve, uint16_t block, uint8_t *data){
+	printf("WRITE DMA\n");
+	pcie_dma_pvt *pvt = (pcie_dma_pvt*)curve->user;
+	DMAKernelMemoryWrite(pvt->bar[0],pvt->bar[2],NULL,pvt->kmem_handle,block*SLLP_CURVE_BLOCK_SIZE,
+			pvt->kernel_memory,1);
+	data = (uint8_t*)pvt->kmem_handle->pa;
+	return;
+}
+
 int main(void)
 {
 	int deviceNumber;
@@ -253,9 +272,9 @@ int main(void)
 	/***
 	Create process
 	***/
-	
+
 	//Creating process for each device
-	
+
 	pid_t  pid;
 	process_type process = TYPE_PARENT_PROCESS;
 	for(i=0; i<MAX_DEVICES; i++){
@@ -274,7 +293,7 @@ int main(void)
 	/***
 	Pcie Configuration
 	***/
-	
+
 	pcie_dma_pvt *pvt;
 	pvt = g_new(pcie_dma_pvt,1);
 	pcie_dma_pvt_Initialize(pvt);
@@ -297,7 +316,7 @@ int main(void)
 		printf("\nfile descriptor was not found!\n");
 		printf("process %d being closed\n", (unsigned int)getpid());
 		pcie_dma_pvt_Cleanup(pvt);
-		return -1;	
+		return -1;
 	}
 
 	/*initialize pci handle*/
@@ -370,7 +389,7 @@ int main(void)
 	}
 	pd_mapUserMemory(pvt->pci_handle, mem, BRAM_SIZE, pvt->umem_handle);//TODO:check return value
 	g_free(mem);
-	
+
 	/***
 	Initialize sllp libs
 	***/
@@ -380,13 +399,13 @@ int main(void)
 	uint32_t *sdram_mem = (uint32_t*)(pvt->bar[2]+offset);
 	//struct sllp_var variable_manager[VAR_NUM];
 
-	/*Dma curve*/
+	/*curve*/
 	pvt->sllp_dma = sllp_server_new();
 
 	pvt->dma_curve[0].info.id = 0;
 	pvt->dma_curve[0].info.writable = false;
-	pvt->dma_curve[0].info.nblocks = 2;
-	pvt->dma_curve[0].read_block = read_dio;	
+	pvt->dma_curve[0].info.nblocks = 0;// 1 bloco
+	pvt->dma_curve[0].read_block = read_dio;
 	pvt->dma_curve[0].write_block = write_dio;
 	pvt->dma_curve[0].user = (uint8_t*)sdram_mem;
 
@@ -398,14 +417,28 @@ int main(void)
 		return 0;
 	}
 
-	
+	pvt->dma_curve[1].info.id = 1;
+	pvt->dma_curve[1].info.writable = false;
+	pvt->dma_curve[1].info.nblocks = 0;// 1 bloco
+	pvt->dma_curve[1].read_block = read_dma;
+	pvt->dma_curve[1].write_block = write_dma;
+	pvt->dma_curve[1].user = (void*)pvt;
+
+	if((err = (sllp_register_curve(pvt->sllp_dma, &pvt->dma_curve[1]))))
+	{
+		printf("process %d being closed\n", (unsigned int)getpid());
+		pcie_dma_pvt_Cleanup(pvt);
+		fprintf(stderr, "sllp_register_curve: %s\n", sllp_error_str(err));
+		return 0;
+	}
+
 	/*Low priority sllp*/
-	
+
 	uint8_t test_var[1] = { 0x03 };
 	pvt->sllp = sllp_server_new();
 
 
-	pvt->variable_manager[0].info.id = 0;	
+	pvt->variable_manager[0].info.id = 0;
 	pvt->variable_manager[0].info.writable = true;
 	pvt->variable_manager[0].info.size = sizeof(uint32_t);//4 bytes...I know
 	pvt->variable_manager[0].data = (uint8_t*)(sdram_mem);
@@ -438,39 +471,39 @@ int main(void)
 	for(i=0;i<2;i++){
 		printf ("Trying connection on %d, on process %d\n",(PORT+i),(unsigned int)getpid());
 		parentfd[i] = socket(AF_INET, SOCK_STREAM, 0);
-		if (parentfd[i] < 0) 
+		if (parentfd[i] < 0)
 			error("ERROR opening socket");
 
 		optval = 1;
-		setsockopt(parentfd[i], SOL_SOCKET, SO_REUSEADDR, 
+		setsockopt(parentfd[i], SOL_SOCKET, SO_REUSEADDR,
 		     (const void *)&optval , sizeof(int));
 
 		setsockopt(parentfd[i], IPPROTO_TCP, TCP_NODELAY,(const void*)&optval, sizeof(int));
- 
+
 		bzero((char *) &serveraddr[i], sizeof(serveraddr));
 
 		serveraddr[i].sin_family = AF_INET;
 
 		serveraddr[i].sin_addr.s_addr = htonl(INADDR_ANY);
 
-		printf("port: %u\n", PORT+i+3*(pvt->DeviceNumber)); 
+		printf("port: %u\n", PORT+i+3*(pvt->DeviceNumber));
 		serveraddr[i].sin_port = htons((unsigned short)(PORT+i+3*(pvt->DeviceNumber)));
 
-		if (bind(parentfd[i], (struct sockaddr *) &serveraddr[i], 
-		 sizeof(serveraddr[i])) < 0) 
+		if (bind(parentfd[i], (struct sockaddr *) &serveraddr[i],
+		 sizeof(serveraddr[i])) < 0)
 			error("ERROR on binding");
 
-		if (listen(parentfd[i], 5) < 0) /* allow 5 requests to queue up */ 
+		if (listen(parentfd[i], 5) < 0) /* allow 5 requests to queue up */
 			 error("ERROR on listen");
 		clientlen[0] = sizeof(clientaddr[i]);
 		clientlen[1] = sizeof(clientaddr[i]);
-		
+
 	//clientlen = sizeof(clientaddr);
 		//childfd[i] = accept(parentfd[i], (struct sockaddr *) &clientaddr[i], &clientlen[i]);
-		//if (childfd[i] < 0) 
+		//if (childfd[i] < 0)
 			//error("ERROR on accept");
    	}
-	
+
 	/**
 	Create threads
 	**/
@@ -490,13 +523,13 @@ int main(void)
 	connection_fd *fd_struct;
 	while(1){
 		printf("accept: wait for a connection request on process %d  \n", (unsigned int)getpid());
-		childfd[0] = accept(parentfd[0], (struct sockaddr *) &clientaddr[0], &clientlen[0]); 
+		childfd[0] = accept(parentfd[0], (struct sockaddr *) &clientaddr[0], &clientlen[0]);
 		childfd[1] = accept(parentfd[1], (struct sockaddr *) &clientaddr[1], &clientlen[1]);
 		printf("accept: wait for a connection request on process %d  \n", (unsigned int)getpid());
 		printf("childfd[0] = %d childfd[1] =  %d\n",childfd[0], childfd[1]);
-	
+
 		if ( (childfd[0] < 0) || (childfd[1] < 0)){
-		
+
 			error("ERROR on accept");
 			continue;
 		}
@@ -504,7 +537,7 @@ int main(void)
 			printf("connections accepted\n");
 			fd_struct = g_new(connection_fd,1);
 			fd_struct->ppvt = pvt;
-			
+
 			fd_struct->childfd = childfd[0];
 			printf("socket main thread: %d\n",childfd[1]);
 			printf("socket main thread: %d\n",fd_struct->childfd);

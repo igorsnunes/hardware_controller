@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/types.h> 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <signal.h>
@@ -15,8 +15,8 @@ int socket_gl;
 int socket_gl2;
 int sendFPGA(uint8_t *data, uint32_t *count)
 {
-    printf("send\n");  
-    printf("count = %u\n", *count);  
+    printf("send\n");
+    printf("count = %u\n", *count);
     size_t wrote;
 
     wrote = send(socket_gl, data, *count, 0);
@@ -43,8 +43,8 @@ int recvFPGA(uint8_t *data, uint32_t *count){
 	uint8_t* payload;
 
 	if(size > 0)
-	{    
-		payload = (uint8_t*) malloc(size*sizeof(char));    
+	{
+		payload = (uint8_t*) malloc(size*sizeof(char));
 		n  = recv(socket_gl, payload, size, 0);
 		if(n < 0) printf("Error reading payload\n");
 	}
@@ -69,8 +69,8 @@ int recvFPGA(uint8_t *data, uint32_t *count){
 
 int sendFPGA2(uint8_t *data, uint32_t *count)
 {
-    printf("send2\n");  
-    printf("count2 = %u\n", *count);  
+    printf("send2\n");
+    printf("count2 = %u\n", *count);
     size_t wrote;
 
     wrote = send(socket_gl2, data, *count, 0);
@@ -78,6 +78,14 @@ int sendFPGA2(uint8_t *data, uint32_t *count)
 
 	//printf("wrote: %d\n", wrote);
 
+    unsigned int i;
+    printf("SEND [ ");
+    if(*count <= 16)
+        for(i = 0; i < *count; ++i)
+            printf("%02X ", data[i]);
+    else
+        printf(" %d bytes ", *count);
+    printf("]\n");
     return EXIT_SUCCESS;
 }
 
@@ -88,7 +96,7 @@ int recvFPGA2(uint8_t *data, uint32_t *count){
 	size_t size;
 	n = recv(socket_gl2, header, 2, 0);
 	if(n < 0) printf("Error reading header\n"); //TODO: Return error;
-	
+
 	if(header[1] == 255)
 		size = 16386;
 	else
@@ -98,8 +106,8 @@ int recvFPGA2(uint8_t *data, uint32_t *count){
 	uint8_t* payload;
 
 	if(size > 0)
-	{    
-		payload = (uint8_t*) malloc(size*sizeof(char));    
+	{
+		payload = (uint8_t*) malloc(size*sizeof(char));
 		n  = recv(socket_gl2, payload, size, 0);
 		if(n < 0) printf("Error reading payload\n");
 	}
@@ -118,6 +126,14 @@ int recvFPGA2(uint8_t *data, uint32_t *count){
 	int n = recv(socket_gl2, data, *count, 0);
 
 	printf("data[0]:%d,data[1]:%d\n",data[0],data[1]);*/
+        unsigned int i;
+        printf("RECV [ ");
+        if(*count <= 16)
+            for(i = 0; i < *count; ++i)
+                printf("%02X ", data[i]);
+        else
+            printf(" %d bytes ", *count);
+        printf("]\n");
         return EXIT_SUCCESS;
 }
 
@@ -184,7 +200,7 @@ int main(int argc, char **argv) {
 		printf("SLLP fail\n");
 		return -1;
 	}
-	
+
 	struct sllp_var_info *var = &vars->list[0];
 
 	/**curves**/
@@ -193,8 +209,8 @@ int main(int argc, char **argv) {
 		printf("sllp initialization error\n");
 		return -1;
 	}
-	if (err = sllp_client_init(sllp2)!=SLLP_SUCCESS){
-		printf("Client initialization error: %d\n",err);
+	if ((err = sllp_client_init(sllp2))!=SLLP_SUCCESS){
+		printf("Client initialization error: %s\n", sllp_error_str (err));
 		return -1;
 	}
 
@@ -206,17 +222,18 @@ int main(int argc, char **argv) {
 		printf("SLLP fail\n");
 		return -1;
 	}
-	char *curvechar = (char*)malloc(sizeof(char)*2);
-	curvechar[0] = 'A';
-	curvechar[1] = 'B';
-	struct sllp_curve_info *var2 = &vars2->list[0];
+	uint8_t *curvechar = (uint8_t*)malloc(sizeof(uint8_t)*SLLP_CURVE_BLOCK_SIZE);
+	//curvechar[0] = 'A';
+	//curvechar[1] = 'B';
+	struct sllp_curve_info *var0 = &vars2->list[0];
+	struct sllp_curve_info *var1 = &vars2->list[1];
 	//receive_answer(sock);
 	int i=0;
 	while(1) {
-		
+
 		if(sllp_write_var(sllp, var, (uint8_t*)writechar)!=SLLP_SUCCESS)
 		{
-			printf("write error!\n");	
+			printf("write error!\n");
 		}
 		if(sllp_read_var(sllp, var, (uint8_t*)writechar)!=SLLP_SUCCESS)
 			printf("read error!\n");
@@ -225,11 +242,14 @@ int main(int argc, char **argv) {
 
 		//if(sllp_send_curve_block(sllp2,var2,0,curvechar)!=SLLP_SUCCESS)
 		//	printf("read curve error\n");
-			
 
-		if(sllp_request_curve_block(sllp2,var2,0,curvechar)!=SLLP_SUCCESS)
-			printf("read curve error\n");
-		return 0;	
+
+		if((err = sllp_request_curve_block(sllp2,var0,0,curvechar))!=SLLP_SUCCESS)
+			printf("Request curve error: %s\n", sllp_error_str (err));
+
+		if((err = sllp_request_curve_block(sllp2,var1,0,curvechar))!=SLLP_SUCCESS)
+			printf("Request curve dma  error: %s\n", sllp_error_str (err));
+		sleep(10);
 	}
 
     //close(sock);
