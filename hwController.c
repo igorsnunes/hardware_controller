@@ -4,19 +4,21 @@
 #include "sllp_server.h"
 #include <glib.h>
 #include <netdb.h>
-#include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "/usr/include/pciDriver/driver/pciDriver.h"
 #include "/usr/include/pciDriver/lib/pciDriver.h"
+#include <netinet/tcp.h>
+
 #define   MAX_DEVICES  5
 #define   VAR_NUM 1
+#define   CURVE_NUM 1
 #define   PORT 7000
 
 #define BRAM_SIZE  0x4000
 #define MAXBUFRECV 256
-
+#define SLLP_CURVE_TEST 2
 
 typedef enum {
 	TYPE_CHILD_PROCESS,
@@ -33,7 +35,9 @@ typedef struct {
     void **bar;
     int fd;
     struct sllp_var variable_manager[VAR_NUM];
+    struct sllp_curve dma_curve[CURVE_NUM];
     sllp_server_t *sllp;
+    sllp_server_t *sllp_dma;
 } pcie_dma_pvt;
 
 typedef struct {
@@ -80,7 +84,7 @@ static void pcie_dma_pvt_Cleanup(pcie_dma_pvt *pvt){
 	g_free(pvt->umem_handle);
 	g_free(pvt);
 }
-void connection_receive(void *conn_fd){
+void connection_low(void *conn_fd){
 	connection_fd *fd_pvt = (connection_fd*)conn_fd;
 	int childfd = fd_pvt->childfd;
 	int n;
@@ -92,6 +96,7 @@ void connection_receive(void *conn_fd){
 	g_free(fd_pvt);
 	struct sllp_raw_packet request;
 	struct sllp_raw_packet response;
+	printf("connection low socket: %u", childfd);
 	while (1){
 		
 		buf = (uint8_t*)g_try_malloc(sizeof(uint8_t)*MAXBUFRECV);
@@ -132,29 +137,113 @@ void connection_receive(void *conn_fd){
 	}
 	return;
 }
+static uint8_t* recv_message(int *n,unsigned int childfd, uint8_t *buf){
+	uint8_t *auxbuf;
+	int i;
 
+	printf("waiting message from client\n");
+	*n = read(childfd, (char*)buf, MAXBUFRECV);
+	printf("message received: %d %d \n",buf[0],buf[1]);
+	for(i = 0;i<buf[1];i++)
+		printf("%d ",buf[i+2]);
+	printf("\n");
+	auxbuf = g_try_malloc(*(n)*sizeof(uint8_t));
+	if (n < 0){ 
+		error("ERROR reading from socket");
+		return NULL;
+	}
+
+	memcpy(auxbuf,buf,*(n));
+
+	g_free(buf);
+	return auxbuf;
+}
+static int send_message(int *n, unsigned int childfd, uint8_t *buf, unsigned int len){	
+	int i;
+	printf("data to be sent: %d %d \n",buf[0],buf[1]);
+	for(i = 0;i<buf[1];i++)
+		printf("%d ",buf[i+2]);
+	printf("\n");
+	
+	*n = write(childfd, (char*)buf, len);
+	if (n < 0){
+		error("ERROR writing to socket");
+		return 0;
+	}
+	return 1;
+}
+void connection_dma(void *conn_fd){
+	connection_fd *fd_pvt = (connection_fd*)conn_fd;
+	int childfd = fd_pvt->childfd;
+	int n;
+	int i;
+	pcie_dma_pvt *pvt = fd_pvt->ppvt;
+	uint8_t *buf;	
+	uint8_t *auxbuf;
+	uint8_t *bufresponse;
+	g_free(fd_pvt);
+	struct sllp_raw_packet request;
+	struct sllp_raw_packet response;
+	while (1){
+		
+		buf = (uint8_t*)g_try_malloc(sizeof(uint8_t)*MAXBUFRECV);
+		buf = recv_message(&n,childfd,buf);
+
+		request.data = buf;
+		request.len = n;
+
+		bufresponse = (char*)g_try_malloc(sizeof(char)*MAXBUFRECV);
+		response.data = bufresponse;
+		
+		sllp_process_packet (pvt->sllp_dma,&request,&response);
+		
+		send_message(&n, childfd, response.data, response.len);	
+		g_free(buf);
+		g_free(bufresponse);
+	}
+	return;
+}
 
 static GThread *serve_it(void *thread_parameter, thread_parameter_type type){
 	connection_fd *fd_n,*fd_o;
 	GThread *new_thread;
 	GError *err1 = NULL;
+	fd_o = (connection_fd*)thread_parameter;
+	fd_n = g_new(connection_fd,1);
+	memcpy(fd_n,fd_o,sizeof(connection_fd));
+
 	switch(type){
 		case CONN_LOW:
-			fd_o = (connection_fd*)thread_parameter;
-			fd_n = g_new(connection_fd,1);
-			memcpy(fd_n,fd_o,sizeof(connection_fd));
-			new_thread = g_thread_create((GThreadFunc)connection_receive,(void*)fd_n,TRUE,&err1);
+			new_thread = g_thread_create((GThreadFunc)connection_low,(void*)fd_n,TRUE,&err1);
 			break;
 		case CONN_HIGH:
 			//new_thread = g_thread_create((GThreadFunc)command_execution,thread_parameter,TRUE,&err1);
 			//break;
 		case CONN_DMA:
+			new_thread = g_thread_create((GThreadFunc)connection_dma,(void*)fd_n,TRUE,&err1);
 			break;
 	}
 	if(!new_thread)
 		printf("thread could not be created!\n");
 
 	return new_thread;
+}
+
+void read_dio(struct sllp_curve *curve, uint8_t block, uint8_t *data){
+	printf("READ DMA");
+	uint8_t *data_block = (uint8_t*) curve->user + block*SLLP_CURVE_BLOCK_SIZE;
+	memcpy(data, data_block, SLLP_CURVE_BLOCK_SIZE);
+	return;
+}
+
+void write_dio(struct sllp_curve *curve, uint8_t block, uint8_t *data){
+	printf("WRITE DMA");
+	// Pega informacao sobre qual curva escrever
+	uint8_t *data_block = (uint8_t*) curve->user + block*SLLP_CURVE_BLOCK_SIZE;
+
+	// Copia os dados
+	memcpy(data_block, data, SLLP_CURVE_BLOCK_SIZE);
+	return;
 }
 			
 int main(void)
@@ -283,18 +372,38 @@ int main(void)
 	g_free(mem);
 	
 	/***
-	Initialize sllp lib
+	Initialize sllp libs
 	***/
-
-	//struct sllp_var variable_manager[VAR_NUM];
-
 	enum sllp_err err;
-	uint8_t test_var[1] = { 0x03 };
-	pvt->sllp = sllp_server_new();
-
 	//test variable for sdram
 	uint32_t offset = 0;
 	uint32_t *sdram_mem = (uint32_t*)(pvt->bar[2]+offset);
+	//struct sllp_var variable_manager[VAR_NUM];
+
+	/*Dma curve*/
+	pvt->sllp_dma = sllp_server_new();
+
+	pvt->dma_curve[0].info.id = 0;
+	pvt->dma_curve[0].info.writable = false;
+	pvt->dma_curve[0].info.nblocks = 2;
+	pvt->dma_curve[0].read_block = read_dio;	
+	pvt->dma_curve[0].write_block = write_dio;
+	pvt->dma_curve[0].user = (uint8_t*)sdram_mem;
+
+	if((err = sllp_register_curve(pvt->sllp_dma, &pvt->dma_curve[0])))
+	{
+		printf("process %d being closed\n", (unsigned int)getpid());
+		pcie_dma_pvt_Cleanup(pvt);
+		fprintf(stderr, "sllp_register_curve: %s\n", sllp_error_str(err));
+		return 0;
+	}
+
+	
+	/*Low priority sllp*/
+	
+	uint8_t test_var[1] = { 0x03 };
+	pvt->sllp = sllp_server_new();
+
 
 	pvt->variable_manager[0].info.id = 0;	
 	pvt->variable_manager[0].info.writable = true;
@@ -303,8 +412,13 @@ int main(void)
 	sdram_mem[0]  = (uint32_t) 10;
 	printf("teste: %u\n", sdram_mem[0]);
 
-	err = sllp_register_variable(pvt->sllp,&pvt->variable_manager[0]);
-
+	if((err = sllp_register_variable(pvt->sllp, &pvt->variable_manager[0])))
+	{
+		printf("process %d being closed\n", (unsigned int)getpid());
+		pcie_dma_pvt_Cleanup(pvt);
+		fprintf(stderr, "sllp_register_variable: %s\n", sllp_error_str(err));
+		return 0;
+	}
 
 	/***
 	Initiate TCP server
@@ -321,7 +435,7 @@ int main(void)
 	char *hostaddrp; /* dotted decimal host addr string */
 	int optval; /* flag value for setsockopt */
 	int n; /* message byte size */
-	for(i=0;i<1;i++){
+	for(i=0;i<2;i++){
 		printf ("Trying connection on %d, on process %d\n",(PORT+i),(unsigned int)getpid());
 		parentfd[i] = socket(AF_INET, SOCK_STREAM, 0);
 		if (parentfd[i] < 0) 
@@ -331,22 +445,27 @@ int main(void)
 		setsockopt(parentfd[i], SOL_SOCKET, SO_REUSEADDR, 
 		     (const void *)&optval , sizeof(int));
 
+		setsockopt(parentfd[i], IPPROTO_TCP, TCP_NODELAY,(const void*)&optval, sizeof(int));
+ 
 		bzero((char *) &serveraddr[i], sizeof(serveraddr));
 
 		serveraddr[i].sin_family = AF_INET;
 
 		serveraddr[i].sin_addr.s_addr = htonl(INADDR_ANY);
 
-		serveraddr[i].sin_port = htons((unsigned short)(PORT+i));
+		printf("port: %u\n", PORT+i+3*(pvt->DeviceNumber)); 
+		serveraddr[i].sin_port = htons((unsigned short)(PORT+i+3*(pvt->DeviceNumber)));
 
 		if (bind(parentfd[i], (struct sockaddr *) &serveraddr[i], 
-		 sizeof(serveraddr)) < 0) 
+		 sizeof(serveraddr[i])) < 0) 
 			error("ERROR on binding");
 
 		if (listen(parentfd[i], 5) < 0) /* allow 5 requests to queue up */ 
 			 error("ERROR on listen");
-
-		//clientlen = sizeof(clientaddr);
+		clientlen[0] = sizeof(clientaddr[i]);
+		clientlen[1] = sizeof(clientaddr[i]);
+		
+	//clientlen = sizeof(clientaddr);
 		//childfd[i] = accept(parentfd[i], (struct sockaddr *) &clientaddr[i], &clientlen[i]);
 		//if (childfd[i] < 0) 
 			//error("ERROR on accept");
@@ -367,51 +486,36 @@ int main(void)
 		return -1;
 	}
 
-	GThread *low_thread;
+	GThread *low_thread,*dma_thread;
 	connection_fd *fd_struct;
 	while(1){
-		 
 		printf("accept: wait for a connection request on process %d  \n", (unsigned int)getpid());
-		clientlen[0] = sizeof(clientaddr);
-		childfd[0] = accept(parentfd[0], (struct sockaddr *) &clientaddr[0], &clientlen[0]);
-		if (childfd[0] < 0){
+		childfd[0] = accept(parentfd[0], (struct sockaddr *) &clientaddr[0], &clientlen[0]); 
+		childfd[1] = accept(parentfd[1], (struct sockaddr *) &clientaddr[1], &clientlen[1]);
+		printf("accept: wait for a connection request on process %d  \n", (unsigned int)getpid());
+		printf("childfd[0] = %d childfd[1] =  %d\n",childfd[0], childfd[1]);
+	
+		if ( (childfd[0] < 0) || (childfd[1] < 0)){
+		
 			error("ERROR on accept");
 			continue;
 		}
 		else{
-			printf("connection accepted\n");
+			printf("connections accepted\n");
 			fd_struct = g_new(connection_fd,1);
 			fd_struct->ppvt = pvt;
+			
 			fd_struct->childfd = childfd[0];
+			printf("socket main thread: %d\n",childfd[1]);
+			printf("socket main thread: %d\n",fd_struct->childfd);
 			low_thread = serve_it(fd_struct,CONN_LOW);
+			printf("socket main thread: %d\n",fd_struct->childfd);
+			fd_struct->childfd = childfd[1];
+			printf("socket main thread: %d\n",fd_struct->childfd);
+			dma_thread = serve_it(fd_struct,CONN_DMA);
+			printf("socket main thread: %d\n",fd_struct->childfd);
 			g_free(fd_struct);
 		}
-		/*clientlen = sizeof(clientaddr);
-		childfd_high = accept(parentfd, (struct sockaddr *) &clientaddr, &clientlen);
-		if (childfd_high < 0){
-			error("ERROR on accept");
-			continue;
-		}
-		else{
-			fd_struct = g_new(connection_fd,1);
-			fd_struct->ppvt = pvt;
-			fd_struct->childfd_high = childfd;
-			serve_it(fd_struct,CONN_HIGH);
-			g_free(fd_struct);
-		}
-		clientlen = sizeof(clientaddr);
-		childfd_dma = accept(parentfd, (struct sockaddr *) &clientaddr, &clientlen);
-		if (childfd_dma < 0){
-			error("ERROR on accept");
-			continue;
-		}
-		else{
-			fd_struct = g_new(connection_fd,1);
-			fd_struct->ppvt = pvt;
-			fd_struct->childfd_dma = childfd;
-			serve_it(fd_struct,CONN_DMA);
-			g_free(fd_struct);
-		}*/
 	}
 
 	return 0;
