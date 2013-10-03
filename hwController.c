@@ -161,16 +161,12 @@ static uint8_t* recv_message(int *n,unsigned int childfd, uint8_t *buf){
 }
 static int send_message(int *n, unsigned int childfd, uint8_t *buf, unsigned int len){
 	int i;
-	printf("data to be sent: %d %d \n",buf[0],buf[1]);
-	for(i = 0;i<buf[1];i++)
-		printf("%d ",buf[i+2]);
-	printf("\n");
-
 	*n = write(childfd, (char*)buf, len);
 	if (n < 0){
 		error("ERROR writing to socket");
 		return 0;
 	}
+	printf("%d bytes should be sent. %d were sent\n",len,*n);
 	return 1;
 }
 void connection_dma(void *conn_fd){

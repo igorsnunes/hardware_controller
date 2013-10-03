@@ -79,13 +79,6 @@ int sendFPGA2(uint8_t *data, uint32_t *count)
 	//printf("wrote: %d\n", wrote);
 
     unsigned int i;
-    printf("SEND [ ");
-    if(*count <= 16)
-        for(i = 0; i < *count; ++i)
-            printf("%02X ", data[i]);
-    else
-        printf(" %d bytes ", *count);
-    printf("]\n");
     return EXIT_SUCCESS;
 }
 
@@ -244,10 +237,10 @@ int main(int argc, char **argv) {
 		//	printf("read curve error\n");
 
 
-		if((err = sllp_request_curve_block(sllp2,var0,0,curvechar))!=SLLP_SUCCESS)
-			printf("Request curve error: %s\n", sllp_error_str (err));
+//		if((err = (sllp_request_curve_block(sllp2,var0,0,curvechar)))!=SLLP_SUCCESS)
+//			printf("Request curve error: %s\n", sllp_error_str (err));
 
-		if((err = sllp_request_curve_block(sllp2,var1,0,curvechar))!=SLLP_SUCCESS)
+		if((err = (sllp_request_curve_block(sllp2,var1,0,curvechar)))!=SLLP_SUCCESS)
 			printf("Request curve dma  error: %s\n", sllp_error_str (err));
 		sleep(10);
 	}
