@@ -193,7 +193,7 @@ void connection_dma(void *conn_fd){
 		response.data = bufresponse;
 
 		sllp_process_packet (pvt->sllp_dma,&request,&response);
-
+		printf("%d response size\n",response.data[1]);
 		send_message(&n, childfd, response.data, response.len);
 		g_free(buf);
 		g_free(bufresponse);
@@ -246,18 +246,23 @@ void write_dio(struct sllp_curve *curve, uint16_t block, uint8_t *data){
 void read_dma(struct sllp_curve *curve, uint16_t block, uint8_t *data){
 	printf("READ DMA\n");
 	pcie_dma_pvt *pvt = (pcie_dma_pvt*)curve->user;
-	DMAKernelMemoryRead(pvt->bar[0],pvt->bar[2],NULL,pvt->kmem_handle,block*SLLP_CURVE_BLOCK_SIZE,
+	DMAKernelMemoryRead(pvt->bar[0],pvt->bar[2]+(block*SLLP_CURVE_BLOCK_SIZE),NULL,pvt->kmem_handle,block*SLLP_CURVE_BLOCK_SIZE,
 			pvt->kernel_memory,1);
-	data = (uint8_t*)pvt->kmem_handle->pa;
+	memcpy(data,pvt->kernel_memory,SLLP_CURVE_BLOCK_SIZE);
 	return;
 }
 
 void write_dma(struct sllp_curve *curve, uint16_t block, uint8_t *data){
 	printf("WRITE DMA\n");
+	int i;
 	pcie_dma_pvt *pvt = (pcie_dma_pvt*)curve->user;
-	DMAKernelMemoryWrite(pvt->bar[0],pvt->bar[2],NULL,pvt->kmem_handle,block*SLLP_CURVE_BLOCK_SIZE,
+	uint8_t *ptr = (uint8_t*)pvt->kernel_memory;
+
+	for(i = 0;i < SLLP_CURVE_BLOCK_SIZE; i++)
+		ptr[i] = data[i];
+
+	DMAKernelMemoryWrite(pvt->bar[0],pvt->bar[2]+(block*SLLP_CURVE_BLOCK_SIZE),NULL,pvt->kmem_handle,block*SLLP_CURVE_BLOCK_SIZE,
 			pvt->kernel_memory,1);
-	data = (uint8_t*)pvt->kmem_handle->pa;
 	return;
 }
 
@@ -535,14 +540,9 @@ int main(void)
 			fd_struct->ppvt = pvt;
 
 			fd_struct->childfd = childfd[0];
-			printf("socket main thread: %d\n",childfd[1]);
-			printf("socket main thread: %d\n",fd_struct->childfd);
 			low_thread = serve_it(fd_struct,CONN_LOW);
-			printf("socket main thread: %d\n",fd_struct->childfd);
 			fd_struct->childfd = childfd[1];
-			printf("socket main thread: %d\n",fd_struct->childfd);
 			dma_thread = serve_it(fd_struct,CONN_DMA);
-			printf("socket main thread: %d\n",fd_struct->childfd);
 			g_free(fd_struct);
 		}
 	}

@@ -31,7 +31,7 @@ static void dma_request(volatile uint32_t *base,unsigned long pa, unsigned long 
 	base[5] = next_bda_l;
 	base[6] = length;
 	base[7] = control;	// control is written at the end, starts DMA
-	
+
 	if(block)
 		sleep(5);//TODO:wait for the finished status
 
@@ -75,11 +75,11 @@ void DMAKernelMemoryRead(uint32_t *bar0, uint32_t *bar1, uint64_t *bar2, pd_kmem
 	uint32_t *ptr = (uint32_t*)kernel_memory;
 	unsigned int bar_no = 0x0;
 
-	if (bar1 != NULL) 
+	if (bar1 != NULL)
 		bar_no = 0x2;//sdram transaction, bar 2
-	else if (bar2 != NULL) 
+	else if (bar2 != NULL)
 		bar_no = 0x4;//wishbone transaction, bar 4
-	
+
 	//printf("Fill buffer with zeros\n");
 	//memset(ptr, 3, test_len);
 	/*TODO:check kernel_memory.pa*/
@@ -90,19 +90,10 @@ void DMAKernelMemoryWrite(uint32_t *bar0, uint32_t *bar1, uint64_t *bar2, pd_kme
 	int i=0;
 	uint32_t *ptr = (uint32_t*)kernel_memory;
 	unsigned int bar_no = 0x0;
-	if (bar1 != 0) 
+	if (bar1 != 0)
 		bar_no = 0x2;
-	else if (bar2 != 0) 
+	else if (bar2 != 0)
 		bar_no = 0x4;
-
-	printf("Fill buffer with a pattern\n");
-	// fill with pattern
-	for(i=0;i<(test_len >> 2);i++) {
-		if ((i & 0x00000001) == 0)
-			ptr[i] = i;
-		else
-			ptr[i] = 0xaaaa5555;
-	}
 
 	writeDMA(bar0, km->pa, 0x00000000, 0x00000000, test_len, bar_no, block);
 
@@ -121,4 +112,4 @@ void DMAKernelClearBuffer(uint32_t *bar0, uint32_t *bar1, const unsigned long te
 	}*/
 	return;
 }
-	
+

@@ -41,12 +41,16 @@ int recvFPGA(uint8_t *data, uint32_t *count){
 		size = header[1];
 
 	uint8_t* payload;
-
+	size_t payload_size;
 	if(size > 0)
 	{
 		payload = (uint8_t*) malloc(size*sizeof(char));
-		n  = recv(socket_gl, payload, size, 0);
-		if(n < 0) printf("Error reading payload\n");
+		payload_size = size;
+		while(payload_size != 0){
+			n  = recv(socket_gl, payload, payload_size, 0);
+			if(n < 0) printf("Error reading payload\n");
+			payload_size = payload_size - n;
+		}
 	}
 
 	memcpy(packet, header, 2);
@@ -91,18 +95,28 @@ int recvFPGA2(uint8_t *data, uint32_t *count){
 	if(n < 0) printf("Error reading header\n"); //TODO: Return error;
 
 	if(header[1] == 255)
-		size = 16386;
+		size = SLLP_CURVE_BLOCK_PKT;
 	else
 		size = header[1];
 
-	printf("header %d\n",header[0]);
-	uint8_t* payload;
-
+	printf("header %d %d\n",header[0],header[1]);
+	uint8_t* payload, *payload_aux;
+	int offset = 0;
+	size_t payload_size;
 	if(size > 0)
 	{
 		payload = (uint8_t*) malloc(size*sizeof(char));
-		n  = recv(socket_gl2, payload, size, 0);
-		if(n < 0) printf("Error reading payload\n");
+		payload_aux = (uint8_t*) malloc(size*sizeof(char));
+		payload_size = size;
+		while(payload_size != 0){
+			printf("payload_size =  %d n = %d\n", payload_size,n);
+			n  = recv(socket_gl2, payload_aux, payload_size, 0);
+			if(n < 0) printf("Error reading payload\n");
+			memcpy(payload+offset,payload_aux,n);
+			payload_size = payload_size - n;
+			printf("payload_size =  %d n = %d\n", payload_size,n);
+			offset = n;
+		}
 	}
 
 	memcpy(packet, header, 2);
@@ -113,7 +127,8 @@ int recvFPGA2(uint8_t *data, uint32_t *count){
 	memcpy(data, packet, *count);
 
 	free(header);
-	if(size > 0) free(payload);
+	if(size > 0){free(payload);free(payload_aux);}
+
 
 	/*data = (uint8_t*)malloc(sizeof(data)*1000);
 	int n = recv(socket_gl2, data, *count, 0);
@@ -216,6 +231,7 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 	uint8_t *curvechar = (uint8_t*)malloc(sizeof(uint8_t)*SLLP_CURVE_BLOCK_SIZE);
+	memset (curvechar,'A',SLLP_CURVE_BLOCK_SIZE);
 	//curvechar[0] = 'A';
 	//curvechar[1] = 'B';
 	struct sllp_curve_info *var0 = &vars2->list[0];
@@ -224,7 +240,7 @@ int main(int argc, char **argv) {
 	int i=0;
 	while(1) {
 
-		if(sllp_write_var(sllp, var, (uint8_t*)writechar)!=SLLP_SUCCESS)
+		/*if(sllp_write_var(sllp, var, (uint8_t*)writechar)!=SLLP_SUCCESS)
 		{
 			printf("write error!\n");
 		}
@@ -234,14 +250,23 @@ int main(int argc, char **argv) {
 			printf("byte received: %d\n", writechar[i]);
 
 		//if(sllp_send_curve_block(sllp2,var2,0,curvechar)!=SLLP_SUCCESS)
-		//	printf("read curve error\n");
+		//	printf("read curve error\n");*/
 
 
-//		if((err = (sllp_request_curve_block(sllp2,var0,0,curvechar)))!=SLLP_SUCCESS)
-//			printf("Request curve error: %s\n", sllp_error_str (err));
+		//if((err = (sllp_request_curve_block(sllp2,var0,0,curvechar)))!=SLLP_SUCCESS)
+			//printf("Request curve error: %s\n", sllp_error_str (err));
 
+
+
+		if((err = (sllp_send_curve_block(sllp2,var1,0,curvechar)))!=SLLP_SUCCESS)
+			printf("Send curve dma  error: %s\n", sllp_error_str (err));
+
+		memset (curvechar,'\0',SLLP_CURVE_BLOCK_SIZE);
 		if((err = (sllp_request_curve_block(sllp2,var1,0,curvechar)))!=SLLP_SUCCESS)
 			printf("Request curve dma  error: %s\n", sllp_error_str (err));
+		for(i=0;i<SLLP_CURVE_BLOCK_SIZE;i++)
+			printf("%c ",curvechar[i]);
+		printf("\n");
 		sleep(10);
 	}
 
