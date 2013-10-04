@@ -246,8 +246,9 @@ void write_dio(struct sllp_curve *curve, uint16_t block, uint8_t *data){
 void read_dma(struct sllp_curve *curve, uint16_t block, uint8_t *data){
 	printf("READ DMA\n");
 	pcie_dma_pvt *pvt = (pcie_dma_pvt*)curve->user;
+	int offset = block*SLLP_CURVE_BLOCK_SIZE;
 	DMAKernelMemoryRead(pvt->bar[0],pvt->bar[2]+(block*SLLP_CURVE_BLOCK_SIZE),NULL,pvt->kmem_handle,block*SLLP_CURVE_BLOCK_SIZE,
-			pvt->kernel_memory,1);
+			pvt->kernel_memory,1,offset);
 	memcpy(data,pvt->kernel_memory,SLLP_CURVE_BLOCK_SIZE);
 	return;
 }
@@ -257,12 +258,12 @@ void write_dma(struct sllp_curve *curve, uint16_t block, uint8_t *data){
 	int i;
 	pcie_dma_pvt *pvt = (pcie_dma_pvt*)curve->user;
 	uint8_t *ptr = (uint8_t*)pvt->kernel_memory;
-
+	int offset = block*SLLP_CURVE_BLOCK_SIZE;
 	for(i = 0;i < SLLP_CURVE_BLOCK_SIZE; i++)
 		ptr[i] = data[i];
 
 	DMAKernelMemoryWrite(pvt->bar[0],pvt->bar[2]+(block*SLLP_CURVE_BLOCK_SIZE),NULL,pvt->kmem_handle,block*SLLP_CURVE_BLOCK_SIZE,
-			pvt->kernel_memory,1);
+			pvt->kernel_memory,1,offset);
 	return;
 }
 
