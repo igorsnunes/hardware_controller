@@ -84,7 +84,7 @@ void DMAKernelMemoryRead(uint32_t *bar0, uint32_t *bar1, uint64_t *bar2, pd_kmem
 	//printf("Fill buffer with zeros\n");
 	//memset(ptr, 3, test_len);
 	/*TODO:check kernel_memory.pa*/
-	readDMA(bar0,km->pa+offset,0x00000000, 0x00000000, test_len, bar_no, block);
+	readDMA(bar0,km->pa,0x00000000+offset, 0x00000000, test_len, bar_no, block);
 	return;
 }
 void DMAKernelMemoryWrite(uint32_t *bar0, uint32_t *bar1, uint64_t *bar2, pd_kmem_t *km, const unsigned long test_len, void *kernel_memory, int block,int offset){
@@ -96,7 +96,7 @@ void DMAKernelMemoryWrite(uint32_t *bar0, uint32_t *bar1, uint64_t *bar2, pd_kme
 	else if (bar2 != 0)
 		bar_no = 0x4;
 
-	writeDMA(bar0, km->pa+offset, 0x00000000, 0x00000000, test_len, bar_no, block);
+	writeDMA(bar0, km->pa, 0x00000000+offset, 0x00000000, test_len, bar_no, block);
 
 	return;
 }
