@@ -409,6 +409,8 @@ int main(void)
 	pvt->dma_curve[0].info.nblocks = 0;// 1 bloco
 	pvt->dma_curve[0].read_block = read_dio;
 	pvt->dma_curve[0].write_block = write_dio;
+	//pvt->dma_curve[0].read_block = read_dma;
+	//pvt->dma_curve[0].write_block = write_dma;
 	pvt->dma_curve[0].user = (uint8_t*)sdram_mem;
 
 	if((err = sllp_register_curve(pvt->sllp_dma, &pvt->dma_curve[0])))
@@ -480,7 +482,7 @@ int main(void)
 		setsockopt(parentfd[i], SOL_SOCKET, SO_REUSEADDR,
 		     (const void *)&optval , sizeof(int));
 
-		setsockopt(parentfd[i], IPPROTO_TCP, TCP_NODELAY,(const void*)&optval, sizeof(int));
+		//setsockopt(parentfd[i], IPPROTO_TCP, TCP_NODELAY,(const void*)&optval, sizeof(int));
 
 		bzero((char *) &serveraddr[i], sizeof(serveraddr));
 
@@ -526,11 +528,8 @@ int main(void)
 	while(1){
 		printf("accept: wait for a connection request on process %d  \n", (unsigned int)getpid());
 		childfd[0] = accept(parentfd[0], (struct sockaddr *) &clientaddr[0], &clientlen[0]);
-		childfd[1] = accept(parentfd[1], (struct sockaddr *) &clientaddr[1], &clientlen[1]);
-		printf("accept: wait for a connection request on process %d  \n", (unsigned int)getpid());
-		printf("childfd[0] = %d childfd[1] =  %d\n",childfd[0], childfd[1]);
 
-		if ( (childfd[0] < 0) || (childfd[1] < 0)){
+		if ( childfd[0] < 0 ){
 
 			error("ERROR on accept");
 			continue;
@@ -542,6 +541,24 @@ int main(void)
 
 			fd_struct->childfd = childfd[0];
 			low_thread = serve_it(fd_struct,CONN_LOW);
+			g_free(fd_struct);
+		}
+		printf("accepted connection for single data: waiting for a connection request on process %d  \n", (unsigned int)getpid());
+
+		childfd[1] = accept(parentfd[1], (struct sockaddr *) &clientaddr[1], &clientlen[1]);
+		printf("accept: wait for a connection request on process %d  \n", (unsigned int)getpid());
+		printf("childfd[0] = %d childfd[1] =  %d\n",childfd[0], childfd[1]);
+
+		if ( childfd[1] < 0 ){
+
+			error("ERROR on accept");
+			continue;
+		}
+		else{
+			printf("connections accepted\n");
+			fd_struct = g_new(connection_fd,1);
+			fd_struct->ppvt = pvt;
+
 			fd_struct->childfd = childfd[1];
 			dma_thread = serve_it(fd_struct,CONN_DMA);
 			g_free(fd_struct);
