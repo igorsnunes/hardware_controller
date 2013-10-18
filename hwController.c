@@ -56,8 +56,6 @@ typedef struct {
 	int fd_dest;
 } command;
 
-
-
 typedef enum {
 	CONN_LOW,
 	CONN_HIGH,
@@ -65,6 +63,8 @@ typedef enum {
 } thread_parameter_type;
 
 static void pcie_dma_pvt_Initialize(pcie_dma_pvt *pvt){
+	pvt->sllp = NULL;
+	pvt->sllp_dma = NULL;
 	pvt->pci_handle = NULL;
 	pvt->kernel_memory = NULL;
 	pvt->kmem_handle = NULL;
@@ -381,7 +381,7 @@ int main(void)
 		printf("memory aligned failed\n");
 		printf("process %d being closed\n", (unsigned int)getpid());
 		pcie_dma_pvt_Cleanup(pvt);
-		return 0;
+		return -1;
 	}
 	pvt->umem_handle = g_try_new(pd_umem_t, 1);
 	if (!pvt->kmem_handle){
@@ -409,8 +409,6 @@ int main(void)
 	pvt->dma_curve[0].info.nblocks = 0;// 1 bloco
 	pvt->dma_curve[0].read_block = read_dio;
 	pvt->dma_curve[0].write_block = write_dio;
-	//pvt->dma_curve[0].read_block = read_dma;
-	//pvt->dma_curve[0].write_block = write_dma;
 	pvt->dma_curve[0].user = (uint8_t*)sdram_mem;
 
 	if((err = sllp_register_curve(pvt->sllp_dma, &pvt->dma_curve[0])))
@@ -454,7 +452,7 @@ int main(void)
 		printf("process %d being closed\n", (unsigned int)getpid());
 		pcie_dma_pvt_Cleanup(pvt);
 		fprintf(stderr, "sllp_register_variable: %s\n", sllp_error_str(err));
-		return 0;
+		return -1;
 	}
 
 	/***
@@ -502,10 +500,6 @@ int main(void)
 		clientlen[0] = sizeof(clientaddr[i]);
 		clientlen[1] = sizeof(clientaddr[i]);
 
-	//clientlen = sizeof(clientaddr);
-		//childfd[i] = accept(parentfd[i], (struct sockaddr *) &clientaddr[i], &clientlen[i]);
-		//if (childfd[i] < 0)
-			//error("ERROR on accept");
    	}
 
 	/**
