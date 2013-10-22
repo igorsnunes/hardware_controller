@@ -1,5 +1,5 @@
 TEST_SRC = tests/hwController_tests.c
-TEST_OBJ = $(TEST_SRC:.c:)
+TEST_OBJ = $(TEST_SRC:.c=.o)
 CC = gcc
 CFLAGS = -g -Wall
 LFLAGS = 
@@ -28,7 +28,7 @@ $(RWDMA_OBJ): $(RWDMA_SRC) $(RWDMA_HEAD)
 	$(CC) -c  $(RWDMA_SRC) -lpcidriver
 
 test: $(TEST_SRC) all
-	$(CC) $(CFLAGS) -L/usr/local/lib -o $(TEST_OBJ) $(TEST_SRC) $(HWC_OBJ) -lcunit
+	$(CC) -Wall -L/usr/local/lib -o $(TEST_OBJ) $(TEST_SRC) $(RWDMA_OBJ) -lcunit
 	
 clean:
 	rm $(HWC_OBJ) $(RWDMA_OBJ) $(MAIN) 
