@@ -7,7 +7,7 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <stdint.h>
-
+#define BRAM_SIZE  0x4000
 #include "/usr/include/pciDriver/lib/pciDriver.h"//TODO: smaller include
 #include "/usr/include/pciDriver/driver/pciDriver.h"
 

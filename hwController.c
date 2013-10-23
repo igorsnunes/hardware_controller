@@ -17,7 +17,6 @@
 #define   CURVE_NUM 1
 #define   PORT 7000
 
-#define BRAM_SIZE  0x4000
 #define MAXBUFRECV SLLP_CURVE_BLOCK_SIZE+10
 #define SLLP_CURVE_TEST SLLP_CURVE_BLOCK_SIZE
 
@@ -78,7 +77,7 @@ static void pcie_dma_pvt_Cleanup(pcie_dma_pvt *pvt){
         	pd_close(pvt->pci_handle);
 	if(pvt->bar != NULL){
 		for(i = 0; i <= 4; i = i+2)
-			g_free(pvt->bar[i]);
+			pd_unmapBAR(pvt->pci_handle,i,pvt->bar[i]);
 	}
 	g_free(pvt->bar);
 	g_free(pvt->kmem_handle);
@@ -261,7 +260,6 @@ void write_dma(struct sllp_curve *curve, uint16_t block, uint8_t *data){
 	int offset = block*SLLP_CURVE_BLOCK_SIZE;
 	for(i = 0;i < SLLP_CURVE_BLOCK_SIZE; i++)
 		ptr[i] = data[i];
-
 	DMAKernelMemoryWrite(pvt->bar[0],pvt->bar[2]+(block*SLLP_CURVE_BLOCK_SIZE),NULL,pvt->kmem_handle,block*SLLP_CURVE_BLOCK_SIZE,
 			pvt->kernel_memory,1,offset);
 	return;
@@ -358,8 +356,6 @@ int main(void)
 
 	/*allocating kernel memory*/
 
-	printf("process %d being closed\n", (unsigned int)getpid());
-
 	pvt->kmem_handle = g_try_new(pd_kmem_t, 1);
 	if (!pvt->kmem_handle){
 		printf("process %d being closed\n", (unsigned int)getpid());
@@ -384,7 +380,7 @@ int main(void)
 		return -1;
 	}
 	pvt->umem_handle = g_try_new(pd_umem_t, 1);
-	if (!pvt->kmem_handle){
+	if (!pvt->umem_handle){
 		printf("process %d being closed\n", (unsigned int)getpid());
 		pcie_dma_pvt_Cleanup(pvt);
 		return -1;

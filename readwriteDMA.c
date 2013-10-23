@@ -89,11 +89,10 @@ void DMAKernelMemoryRead(uint32_t *bar0, uint32_t *bar1, uint64_t *bar2, pd_kmem
 }
 void DMAKernelMemoryWrite(uint32_t *bar0, uint32_t *bar1, uint64_t *bar2, pd_kmem_t *km, const unsigned long test_len, void *kernel_memory, int block,int offset){
 	int i=0;
-	uint32_t *ptr = (uint32_t*)kernel_memory;
 	unsigned int bar_no = 0x0;
-	if (bar1 != 0)
+	if (bar1 != NULL)
 		bar_no = 0x2;
-	else if (bar2 != 0)
+	else if (bar2 != NULL)
 		bar_no = 0x4;
 
 	writeDMA(bar0, km->pa, 0x00000000+offset, 0x00000000, test_len, bar_no, block);

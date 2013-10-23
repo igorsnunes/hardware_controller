@@ -28,7 +28,7 @@ $(RWDMA_OBJ): $(RWDMA_SRC) $(RWDMA_HEAD)
 	$(CC) -c  $(RWDMA_SRC) -lpcidriver
 
 test: $(TEST_SRC) all
-	$(CC) -Wall -L/usr/local/lib -o $(TEST_OBJ) $(TEST_SRC) $(RWDMA_OBJ) -lcunit
+	$(CC) -Wall -g $(INCLUDES) -L/usr/local/lib -o $(TEST_OBJ) $(TEST_SRC) $(RWDMA_OBJ) -lcunit -lglib-2.0 -lpcidriver
 	
 clean:
 	rm $(HWC_OBJ) $(RWDMA_OBJ) $(MAIN) 
