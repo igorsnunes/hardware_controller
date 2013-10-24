@@ -1,4 +1,8 @@
 #include "readwriteDMA.h"
+#define REG_SDRAM_PG 0x1C
+#define REG_GSR 0x20
+#define GSR_BIT_DDR_RDY (0x1 << 7)
+#define REG_WB_PG 0x24
 
 static void dma_reset(volatile uint32_t *base){
 	base[7] = 0x0200000A;
@@ -31,16 +35,17 @@ static void dma_request(volatile uint32_t *base,unsigned long pa, unsigned long 
 	base[5] = next_bda_l;
 	base[6] = length;
 	base[7] = control;	// control is written at the end, starts DMA
-
-	if(block)
-		sleep(5);//TODO:wait for the finished status
-
+	//while(sleep(5));
+	int status;
+	do {
+		status = base[8];
+	} while(!(status & 0x1));
 	return;
 }
 /*Write DMA*/
-static void writeDMA(void *bar0, unsigned long ha, unsigned long pa, unsigned long next, unsigned long size, unsigned int bar_no, int block){
+void writeDMA(uint32_t *bar0, unsigned long ha, unsigned long pa, unsigned long next, unsigned long size, unsigned int bar_no, int block){
 
-	uint32_t *bar_zero = (uint32_t*)bar0;
+	uint32_t *bar_zero = bar0;
 	const unsigned int BASE_DMA_DOWN = (0x50 >> 2);
 
 
@@ -52,12 +57,12 @@ static void writeDMA(void *bar0, unsigned long ha, unsigned long pa, unsigned lo
 
 	// Send a DMA transfer
 
-	dma_request(bar0+BASE_DMA_DOWN,pa,ha,size,next,bar_no,block);
+	dma_request(bar_zero+BASE_DMA_DOWN,pa,ha,size,next,bar_no,block);
 
 	return;
 }
 /*Read DMA*/
-static void readDMA(uint32_t *bar0, unsigned long ha, unsigned long pa, unsigned long next, unsigned long size, unsigned int bar_no, int block)
+void readDMA(uint32_t *bar0, unsigned long ha, unsigned long pa, unsigned long next, unsigned long size, unsigned int bar_no, int block)
 {
 	const unsigned int BASE_DMA_UP = (0x2C >> 2);
 

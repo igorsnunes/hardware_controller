@@ -138,18 +138,19 @@ void test_case_sample(void)
 	CU_ASSERT_STRING_EQUAL("string #1", "string #2");
 }
 void test_dma_transfer(void){
-	int i;
+	int i=0;
 	uint32_t *ptr = (uint32_t*)kernel_memory;
 	uint32_t *bar2 = bar[2];
 	uint32_t data[10];
+	uint32_t *bar0 = (uint32_t*)bar[0];
+	for(i=0;i<10;i++)
+		ptr[i] = 7;
 
-	printf("CU_ASSERT_EQUAL(bar[i],ptr[i])\n");
-	for(i=0;i<10;i++){
-		printf("%d = %d ?\n",bar2[i],ptr[i]);
-		CU_ASSERT_EQUAL(bar2[i],ptr[i]);
-	}
-	memset(ptr ,2, 10);
-	DMAKernelMemoryWrite((uint32_t*)bar[0], (uint32_t*)bar[2], NULL, kmem_handle, 10, kernel_memory, 1, 0);
+	printf("\n");
+	for(i=0;i<10;i++)
+		printf("%d ",ptr[i]);
+	printf("\n");
+	/*DMAKernelMemoryWrite((uint32_t*)bar[0], (uint32_t*)bar[2], NULL, kmem_handle, 10, kernel_memory, 1, 0);
 
 	printf("CU_ASSERT_EQUAL(bar2[i],2)\n");
 	for(i=0;i<10;i++){
@@ -166,9 +167,23 @@ void test_dma_transfer(void){
 	DMAKernelMemoryRead(bar[0], bar[2], NULL, kmem_handle, 10, kernel_memory, 1, 0);
 	memcpy(data,ptr,10);
 
-	printf("CU_ASSERT_EQUAL(data[i],2)");
+	printf("CU_ASSERT_EQUAL(data[i],2)\n");
 	for(i=0;i<10;i++){
 		printf("%d = 2 ?\n",bar2[i]);
+		CU_ASSERT_EQUAL(data[i],2);
+	}*/
+	writeDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,10,2,1);
+	bar0[REG_SDRAM_PG>>2] = 0;
+	printf("CU_ASSERT_EQUAL(bar2[i],2)\n");
+	for(i=0;i<10;i++){
+		printf("bar[2] = %d\n",bar2[i]);
+		CU_ASSERT_EQUAL(bar2[i],2);
+	}
+	readDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,10,2,1);
+	memcpy(data,ptr,10);
+	printf("CU_ASSERT_EQUAL(ptr,2)\n");
+	for(i=0;i<10;i++){
+		printf("ptr = %d\n",data[i]);
 		CU_ASSERT_EQUAL(data[i],2);
 	}
 
