@@ -141,10 +141,49 @@ void test_dma_transfer(void){
 	int i=0;
 	uint32_t *ptr = (uint32_t*)kernel_memory;
 	uint32_t *bar2 = bar[2];
-	uint32_t data[10];
+	uint32_t data[BRAM_SIZE];
 	uint32_t *bar0 = (uint32_t*)bar[0];
 	uint32_t expected_value = 8;
 	unsigned long size = 50;
+	for(i=0;i<(size>>2);i++)
+		ptr[i] = expected_value;
+
+	writeDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	//bar0[REG_SDRAM_PG>>2] = 0;
+	for(i=0;i<(size>>2);i++){
+		CU_ASSERT_EQUAL(bar2[i],expected_value);
+	}
+	for(i=0;i<(size>>2);i++)
+		ptr[i] = 0;
+	readDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	memcpy(data,ptr,size);
+	for(i=0;i<(size>>2);i++){
+		CU_ASSERT_EQUAL(data[i],expected_value);
+	}
+
+
+
+	expected_value = 17;
+	size = BRAM_SIZE;
+	for(i=0;i<(size>>2);i++)
+		ptr[i] = expected_value;
+
+	writeDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	for(i=0;i<(size>>2);i++){
+		CU_ASSERT_EQUAL(bar2[i],expected_value);
+	}
+	for(i=0;i<(size>>2);i++)
+		ptr[i] = 0;
+
+	readDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+
+	memcpy(data,ptr,size);
+
+	for(i=0;i<(size>>2);i++){
+		CU_ASSERT_EQUAL(data[i],expected_value);
+	}
+	expected_value = 21;
+	size = 5;
 	for(i=0;i<(size>>2);i++)
 		ptr[i] = expected_value;
 
