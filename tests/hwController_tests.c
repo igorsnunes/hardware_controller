@@ -143,49 +143,60 @@ void test_dma_transfer(void){
 	uint32_t *bar2 = bar[2];
 	uint32_t data[10];
 	uint32_t *bar0 = (uint32_t*)bar[0];
-	for(i=0;i<10;i++)
-		ptr[i] = 7;
+	uint32_t expected_value = 8;
+	unsigned long size = 50;
+	for(i=0;i<(size>>2);i++)
+		ptr[i] = expected_value;
 
-	printf("\n");
-	for(i=0;i<10;i++)
-		printf("%d ",ptr[i]);
-	printf("\n");
-	/*DMAKernelMemoryWrite((uint32_t*)bar[0], (uint32_t*)bar[2], NULL, kmem_handle, 10, kernel_memory, 1, 0);
-
-	printf("CU_ASSERT_EQUAL(bar2[i],2)\n");
-	for(i=0;i<10;i++){
-		printf("bar[2] = %d\n",bar2[i]);
-		CU_ASSERT_EQUAL(bar2[i],2);
+	writeDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	//bar0[REG_SDRAM_PG>>2] = 0;
+	for(i=0;i<(size>>2);i++){
+		CU_ASSERT_EQUAL(bar2[i],expected_value);
 	}
-	printf("CU_ASSERT_EQUAL(bar2[i],ptr[i])\n");
-	for(i=0;i<10;i++){
-		printf("%d = %d ?\n",bar2[i],ptr[i]);
-		CU_ASSERT_EQUAL(bar2[i],ptr[i]);
+	for(i=0;i<(size>>2);i++)
+		ptr[i] = 0;
+	readDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	memcpy(data,ptr,size);
+	for(i=0;i<(size>>2);i++){
+		CU_ASSERT_EQUAL(data[i],expected_value);
 	}
 
-	memset(ptr ,0, 10);
-	DMAKernelMemoryRead(bar[0], bar[2], NULL, kmem_handle, 10, kernel_memory, 1, 0);
-	memcpy(data,ptr,10);
+}
+void test_dma_parameters(void){
+	int i=0;
+	uint32_t *ptr = (uint32_t*)kernel_memory;
+	uint32_t *bar0 = (uint32_t*)bar[0];
+	uint32_t expected_value = 8;
+	unsigned long size = 0x4002;
+	for(i=0;i<(0x4000>>2);i++)
+		ptr[i] = expected_value;
 
-	printf("CU_ASSERT_EQUAL(data[i],2)\n");
-	for(i=0;i<10;i++){
-		printf("%d = 2 ?\n",bar2[i]);
-		CU_ASSERT_EQUAL(data[i],2);
-	}*/
-	writeDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,10,2,1);
-	bar0[REG_SDRAM_PG>>2] = 0;
-	printf("CU_ASSERT_EQUAL(bar2[i],2)\n");
-	for(i=0;i<10;i++){
-		printf("bar[2] = %d\n",bar2[i]);
-		CU_ASSERT_EQUAL(bar2[i],2);
-	}
-	readDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,10,2,1);
-	memcpy(data,ptr,10);
-	printf("CU_ASSERT_EQUAL(ptr,2)\n");
-	for(i=0;i<10;i++){
-		printf("ptr = %d\n",data[i]);
-		CU_ASSERT_EQUAL(data[i],2);
-	}
+	DMA_err error;
+	error = writeDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	CU_ASSERT_EQUAL(DMA_PARAMETERS_FAIL,error);
+
+	size = 3;
+	error = writeDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	CU_ASSERT_EQUAL(DMA_PARAMETERS_FAIL,error);
+
+	size = 0x4000;
+	error = writeDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	CU_ASSERT_EQUAL(DMA_SUCCESS,error);
+
+	for(i=0;i<(size>>2);i++)
+		ptr[i] = 0;
+
+	size = 0x4002;
+	error = readDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	CU_ASSERT_EQUAL(DMA_PARAMETERS_FAIL,error);
+
+	size = 3;
+	error = readDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	CU_ASSERT_EQUAL(DMA_PARAMETERS_FAIL,error);
+
+	size = 0x4000;
+	error = readDMA(bar0,kmem_handle->pa,0x00000000,0x00000000,size,2,1);
+	CU_ASSERT_EQUAL(DMA_SUCCESS,error);
 
 }
 void simple_pointer_test(void){
@@ -223,6 +234,10 @@ int main ( void )
 		return CU_get_error();
 	}
 	if ( (NULL == CU_add_test(pSuite, "test_dma_transfer", test_dma_transfer))){
+		CU_cleanup_registry();
+		return CU_get_error();
+	}
+	if ( (NULL == CU_add_test(pSuite, "test_dma_parameters", test_dma_parameters))){
 		CU_cleanup_registry();
 		return CU_get_error();
 	}
